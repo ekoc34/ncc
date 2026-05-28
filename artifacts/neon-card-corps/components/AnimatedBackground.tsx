@@ -208,6 +208,5 @@ const styles = StyleSheet.create({
     ...StyleSheet.absoluteFillObject,
     opacity: 0.025,
     backgroundColor: 'transparent',
-    backgroundImage: 'repeating-linear-gradient(0deg, transparent, transparent 3px, rgba(0,245,255,0.15) 3px, rgba(0,245,255,0.15) 4px)',
-  } as any,
+  },
 });
