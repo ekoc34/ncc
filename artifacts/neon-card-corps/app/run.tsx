@@ -1,7 +1,16 @@
-import React, { useReducer, useMemo, useCallback, useEffect } from 'react';
+import React, { useReducer, useMemo, useCallback, useEffect, useRef, useState } from 'react';
 import {
-  View, Text, StyleSheet, ScrollView, TouchableOpacity, Modal, Platform,
+  View, Text, StyleSheet, ScrollView, TouchableOpacity, Platform,
 } from 'react-native';
+import Animated, {
+  useSharedValue,
+  useAnimatedStyle,
+  withSequence,
+  withTiming,
+  withSpring,
+  withRepeat,
+  cancelAnimation,
+} from 'react-native-reanimated';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as Haptics from 'expo-haptics';
@@ -9,11 +18,120 @@ import { Feather } from '@expo/vector-icons';
 import { combatReducer, buildInitialState } from '@/game/engine';
 import { Card, SynergyType } from '@/game/types';
 import { useMeta } from '@/context/MetaContext';
-import { getSynergyById } from '@/game/synergies';
 import CardView from '@/components/CardView';
 import EnemyView from '@/components/EnemyView';
 import HealthBar from '@/components/HealthBar';
 import SynergyBadge from '@/components/SynergyBadge';
+import ParticleBurst from '@/components/ParticleBurst';
+import SynergyPopup from '@/components/SynergyPopup';
+
+// ─── Types ──────────────────────────────────────────────────────────────────
+
+interface ParticleBurstEntry {
+  id: string;
+  type: string;
+}
+
+// ─── Boss Intro Overlay ─────────────────────────────────────────────────────
+
+function BossIntroOverlay({ onFight }: { onFight: () => void }) {
+  const titleScale = useSharedValue(0.4);
+  const titleOpacity = useSharedValue(0);
+  const borderPulse = useSharedValue(0.3);
+
+  useEffect(() => {
+    titleOpacity.value = withSequence(
+      withTiming(1, { duration: 300 }),
+    );
+    titleScale.value = withSpring(1, { damping: 7, stiffness: 100 });
+    borderPulse.value = withRepeat(
+      withSequence(
+        withTiming(1, { duration: 600 }),
+        withTiming(0.3, { duration: 600 }),
+      ),
+      -1,
+      false,
+    );
+    return () => cancelAnimation(borderPulse);
+  }, []);
+
+  const titleStyle = useAnimatedStyle(() => ({
+    opacity: titleOpacity.value,
+    transform: [{ scale: titleScale.value }],
+  }));
+
+  const borderStyle = useAnimatedStyle(() => ({
+    borderColor: `rgba(255,48,96,${borderPulse.value})`,
+  }));
+
+  return (
+    <View style={overlay.bg}>
+      <Animated.View style={[overlay.panel, borderStyle, { borderWidth: 2 }]}>
+        <Text style={[overlay.title, { color: '#ff3060', fontSize: 11, letterSpacing: 4 }]}>
+          ⚠ DANGER ⚠
+        </Text>
+        <Animated.View style={titleStyle}>
+          <Text style={[overlay.title, { color: '#ff3060', fontSize: 34, marginTop: 6, letterSpacing: 2 }]}>
+            NEXUS-7
+          </Text>
+        </Animated.View>
+        <Text style={overlay.sub}>
+          The city&apos;s rogue AI overlord awakens.{'\n'}Apex predator of the grid.
+        </Text>
+        <View style={bossStyles.statsRow}>
+          <View style={bossStyles.stat}>
+            <Text style={bossStyles.statVal}>130</Text>
+            <Text style={bossStyles.statLabel}>HP</Text>
+          </View>
+          <View style={bossStyles.stat}>
+            <Text style={bossStyles.statVal}>8</Text>
+            <Text style={bossStyles.statLabel}>ARMOR</Text>
+          </View>
+          <View style={bossStyles.stat}>
+            <Text style={[bossStyles.statVal, { color: '#ff3060', fontSize: 13 }]}>TURN 3</Text>
+            <Text style={bossStyles.statLabel}>ENRAGES</Text>
+          </View>
+        </View>
+        <TouchableOpacity
+          style={bossStyles.fightBtn}
+          onPress={() => {
+            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
+            onFight();
+          }}
+        >
+          <Text style={bossStyles.fightText}>ENGAGE NEXUS-7</Text>
+        </TouchableOpacity>
+      </Animated.View>
+    </View>
+  );
+}
+
+const bossStyles = StyleSheet.create({
+  statsRow: {
+    flexDirection: 'row',
+    gap: 20,
+    justifyContent: 'center',
+    marginVertical: 20,
+    backgroundColor: '#ff306022',
+    borderRadius: 10,
+    padding: 14,
+    borderWidth: 1,
+    borderColor: '#ff306050',
+    width: '100%',
+  },
+  stat: { alignItems: 'center' },
+  statVal: { color: '#ff8080', fontSize: 18, fontWeight: '800' },
+  statLabel: { color: '#8888bb', fontSize: 9, letterSpacing: 1, fontWeight: '600' },
+  fightBtn: {
+    backgroundColor: '#ff3060',
+    borderRadius: 10,
+    paddingVertical: 16,
+    paddingHorizontal: 32,
+    alignItems: 'center',
+    width: '100%',
+  },
+  fightText: { color: '#07000f', fontSize: 16, fontWeight: '800', letterSpacing: 3 },
+});
 
 // ─── Card Select Overlay ────────────────────────────────────────────────────
 
@@ -31,12 +149,19 @@ function CardSelectOverlay({ cards, wave, onSelect, onSkip }: {
           <View style={overlay.divider} />
         </View>
         <Text style={overlay.sub}>Choose a card to add to your deck</Text>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={overlay.cardRow}>
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={overlay.cardRow}
+        >
           {cards.map((card) => (
             <CardView
               key={card.id}
               card={card}
-              onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy); onSelect(card); }}
+              onPress={() => {
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
+                onSelect(card);
+              }}
             />
           ))}
         </ScrollView>
@@ -48,81 +173,47 @@ function CardSelectOverlay({ cards, wave, onSelect, onSkip }: {
   );
 }
 
-// ─── Boss Intro Overlay ─────────────────────────────────────────────────────
-
-function BossIntroOverlay({ onFight }: { onFight: () => void }) {
-  return (
-    <View style={overlay.bg}>
-      <View style={overlay.panel}>
-        <Text style={[overlay.title, { color: '#ff3060', fontSize: 12, letterSpacing: 4 }]}>WARNING</Text>
-        <Text style={[overlay.title, { color: '#ff3060', fontSize: 28, marginTop: 8 }]}>NEXUS-7</Text>
-        <Text style={overlay.sub}>The city&apos;s rogue AI overlord awakens.{'\n'}Apex predator of the grid.</Text>
-        <View style={bossStyles.statsRow}>
-          <View style={bossStyles.stat}>
-            <Text style={bossStyles.statVal}>130</Text>
-            <Text style={bossStyles.statLabel}>HP</Text>
-          </View>
-          <View style={bossStyles.stat}>
-            <Text style={bossStyles.statVal}>8</Text>
-            <Text style={bossStyles.statLabel}>ARMOR</Text>
-          </View>
-          <View style={bossStyles.stat}>
-            <Text style={[bossStyles.statVal, { color: '#ff3060' }]}>ENRAGES</Text>
-            <Text style={bossStyles.statLabel}>TURN 3</Text>
-          </View>
-        </View>
-        <TouchableOpacity style={bossStyles.fightBtn} onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy); onFight(); }}>
-          <Text style={bossStyles.fightText}>ENGAGE NEXUS-7</Text>
-        </TouchableOpacity>
-      </View>
-    </View>
-  );
-}
-
-const bossStyles = StyleSheet.create({
-  statsRow: {
-    flexDirection: 'row',
-    gap: 20,
-    justifyContent: 'center',
-    marginVertical: 20,
-    backgroundColor: '#ff306022',
-    borderRadius: 10,
-    padding: 14,
-    borderWidth: 1,
-    borderColor: '#ff306050',
-  },
-  stat: { alignItems: 'center' },
-  statVal: { color: '#ff3060', fontSize: 18, fontWeight: '800' },
-  statLabel: { color: '#8888bb', fontSize: 9, letterSpacing: 1, fontWeight: '600' },
-  fightBtn: {
-    backgroundColor: '#ff3060',
-    borderRadius: 10,
-    paddingVertical: 16,
-    paddingHorizontal: 32,
-    alignItems: 'center',
-    width: '100%',
-  },
-  fightText: { color: '#07000f', fontSize: 16, fontWeight: '800', letterSpacing: 3 },
-});
-
 // ─── Victory Overlay ────────────────────────────────────────────────────────
 
 function VictoryOverlay({ goldEarned, onContinue }: { goldEarned: number; onContinue: () => void }) {
+  const scale = useSharedValue(0.6);
+  const opacity = useSharedValue(0);
+
+  useEffect(() => {
+    opacity.value = withTiming(1, { duration: 300 });
+    scale.value = withSpring(1, { damping: 9, stiffness: 150 });
+  }, []);
+
+  const panelStyle = useAnimatedStyle(() => ({
+    opacity: opacity.value,
+    transform: [{ scale: scale.value }],
+  }));
+
   return (
     <View style={overlay.bg}>
-      <View style={overlay.panel}>
-        <Text style={[overlay.title, { color: '#ffee00', fontSize: 12, letterSpacing: 4 }]}>MISSION COMPLETE</Text>
-        <Text style={[overlay.title, { color: '#00ff88', fontSize: 32, marginTop: 8 }]}>VICTORY</Text>
+      <Animated.View style={[overlay.panel, panelStyle]}>
+        <Text style={[overlay.title, { color: '#ffee00', fontSize: 11, letterSpacing: 4 }]}>
+          MISSION COMPLETE
+        </Text>
+        <Text style={[overlay.title, { color: '#00ff88', fontSize: 36, marginTop: 8 }]}>
+          VICTORY
+        </Text>
         <Text style={overlay.sub}>NEXUS-7 has been neutralized.</Text>
         <View style={victStyles.goldBox}>
           <Feather name="dollar-sign" size={28} color="#ffee00" />
           <Text style={victStyles.goldAmt}>{goldEarned}</Text>
           <Text style={victStyles.goldLabel}>GOLD EARNED</Text>
         </View>
-        <TouchableOpacity style={victStyles.btn} onPress={() => { Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success); onContinue(); }}>
+        <TouchableOpacity
+          style={victStyles.btn}
+          onPress={() => {
+            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+            onContinue();
+          }}
+        >
           <Text style={victStyles.btnText}>CLAIM REWARDS →</Text>
         </TouchableOpacity>
-      </View>
+      </Animated.View>
     </View>
   );
 }
@@ -152,21 +243,48 @@ const victStyles = StyleSheet.create({
 
 // ─── Game Over Overlay ──────────────────────────────────────────────────────
 
-function GameOverOverlay({ goldEarned, wave, onRetry }: { goldEarned: number; wave: number; onRetry: () => void }) {
+function GameOverOverlay({ goldEarned, wave, onRetry }: {
+  goldEarned: number;
+  wave: number;
+  onRetry: () => void;
+}) {
+  const scale = useSharedValue(0.8);
+  const opacity = useSharedValue(0);
+
+  useEffect(() => {
+    opacity.value = withTiming(1, { duration: 400 });
+    scale.value = withSpring(1, { damping: 10, stiffness: 120 });
+  }, []);
+
+  const panelStyle = useAnimatedStyle(() => ({
+    opacity: opacity.value,
+    transform: [{ scale: scale.value }],
+  }));
+
   return (
     <View style={overlay.bg}>
-      <View style={overlay.panel}>
-        <Text style={[overlay.title, { color: '#ff3060', fontSize: 12, letterSpacing: 4 }]}>SYSTEM FAILURE</Text>
-        <Text style={[overlay.title, { color: '#ff3060', fontSize: 32, marginTop: 8 }]}>GAME OVER</Text>
+      <Animated.View style={[overlay.panel, panelStyle]}>
+        <Text style={[overlay.title, { color: '#ff3060', fontSize: 11, letterSpacing: 4 }]}>
+          SYSTEM FAILURE
+        </Text>
+        <Text style={[overlay.title, { color: '#ff3060', fontSize: 36, marginTop: 8 }]}>
+          GAME OVER
+        </Text>
         <Text style={overlay.sub}>You fell on Wave {wave}.</Text>
         <View style={goStyles.statsBox}>
           <Text style={goStyles.statsLabel}>Gold collected this run</Text>
           <Text style={goStyles.statsVal}>{goldEarned}</Text>
         </View>
-        <TouchableOpacity style={goStyles.btn} onPress={() => { Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error); onRetry(); }}>
+        <TouchableOpacity
+          style={goStyles.btn}
+          onPress={() => {
+            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+            onRetry();
+          }}
+        >
           <Text style={goStyles.btnText}>← BACK TO MENU</Text>
         </TouchableOpacity>
-      </View>
+      </Animated.View>
     </View>
   );
 }
@@ -270,15 +388,136 @@ export default function RunScreen() {
 
   const [state, dispatch] = useReducer(combatReducer, upgrades, buildInitialState);
 
+  // ── Animation state ────────────────────────────────────────────────────────
+  const [enemyHitCounts, setEnemyHitCounts] = useState<number[]>([]);
+  const [particleBursts, setParticleBursts] = useState<ParticleBurstEntry[]>([]);
+  const [synergyPopup, setSynergyPopup] = useState<SynergyType | null>(null);
+
+  const lastPlayedTagsRef = useRef<string[]>([]);
+  const prevEnemyHPsRef = useRef<number[]>([]);
+  const prevSynergiesRef = useRef<SynergyType[]>([]);
+  const synergyPopupTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Screenshake
+  const shakeX = useSharedValue(0);
+  const shakeStyle = useAnimatedStyle(() => ({
+    transform: [{ translateX: shakeX.value }],
+    flex: 1,
+  }));
+
+  const triggerShake = useCallback((intensity: number = 8) => {
+    shakeX.value = withSequence(
+      withTiming(-intensity, { duration: 45 }),
+      withTiming(intensity * 0.85, { duration: 45 }),
+      withTiming(-intensity * 0.5, { duration: 40 }),
+      withTiming(intensity * 0.25, { duration: 35 }),
+      withTiming(0, { duration: 35 }),
+    );
+  }, [shakeX]);
+
+  // ── Detect enemy HP drops → trigger hit animations ─────────────────────────
+  useEffect(() => {
+    const currentHPs = state.enemies.map((e) => e.hp);
+    const prev = prevEnemyHPsRef.current;
+
+    if (prev.length > 0) {
+      let anyHit = false;
+      let maxDmg = 0;
+
+      const newCounts = [...enemyHitCounts];
+      while (newCounts.length < state.enemies.length) newCounts.push(0);
+
+      currentHPs.forEach((hp, i) => {
+        if (prev[i] !== undefined && hp < prev[i]) {
+          const dmg = prev[i] - hp;
+          maxDmg = Math.max(maxDmg, dmg);
+          newCounts[i] = (newCounts[i] ?? 0) + 1;
+          anyHit = true;
+        }
+      });
+
+      if (anyHit) {
+        setEnemyHitCounts([...newCounts]);
+
+        // Particles
+        const burstType = lastPlayedTagsRef.current[0] ?? 'damage';
+        const burstId = `${Date.now()}-${Math.random()}`;
+        setParticleBursts((prev) => [...prev, { id: burstId, type: burstType }]);
+
+        // Screenshake + haptics
+        if (maxDmg >= 14) {
+          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
+          triggerShake(12);
+        } else if (maxDmg >= 7) {
+          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+          triggerShake(6);
+        } else {
+          triggerShake(3);
+        }
+      }
+    }
+
+    prevEnemyHPsRef.current = currentHPs;
+  }, [state.enemies]);
+
+  // ── Detect player HP drop → screen flash ──────────────────────────────────
+  const playerHPRef = useRef(state.player.hp);
+  const screenFlash = useSharedValue(0);
+  const screenFlashStyle = useAnimatedStyle(() => ({
+    opacity: screenFlash.value,
+  }));
+
+  useEffect(() => {
+    const prev = playerHPRef.current;
+    if (state.player.hp < prev) {
+      const dmg = prev - state.player.hp;
+      const intensity = dmg >= 15 ? 0.35 : dmg >= 8 ? 0.22 : 0.12;
+      screenFlash.value = withSequence(
+        withTiming(intensity, { duration: 60 }),
+        withTiming(0, { duration: 300 }),
+      );
+      if (dmg >= 12) {
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
+        triggerShake(7);
+      }
+    }
+    playerHPRef.current = state.player.hp;
+  }, [state.player.hp]);
+
+  // ── Detect new synergies ───────────────────────────────────────────────────
+  useEffect(() => {
+    const prev = prevSynergiesRef.current;
+    const curr = state.activeSynergies;
+    const newlyActive = curr.filter((s) => !prev.includes(s));
+
+    if (newlyActive.length > 0) {
+      if (synergyPopupTimer.current) clearTimeout(synergyPopupTimer.current);
+      setSynergyPopup(newlyActive[0]);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      synergyPopupTimer.current = setTimeout(() => setSynergyPopup(null), 2200);
+    }
+
+    prevSynergiesRef.current = curr;
+  }, [state.activeSynergies]);
+
+  useEffect(() => {
+    return () => {
+      if (synergyPopupTimer.current) clearTimeout(synergyPopupTimer.current);
+    };
+  }, []);
+
+  // ── Layout ─────────────────────────────────────────────────────────────────
   const topPad = Platform.OS === 'web' ? 67 : insets.top;
   const botPad = Platform.OS === 'web' ? 34 : insets.bottom;
 
+  // ── Handlers ───────────────────────────────────────────────────────────────
   const handlePlayCard = useCallback((index: number) => {
     const card = state.hand[index];
     if (!card) return;
     const cost = state.player.zeroCostNext ? 0 : card.cost;
     if (state.player.energy < cost) return;
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    // Store tags for particle type
+    lastPlayedTagsRef.current = card.tags;
     dispatch({ type: 'PLAY_CARD', cardIndex: index });
   }, [state.hand, state.player.energy, state.player.zeroCostNext]);
 
@@ -307,173 +546,205 @@ export default function RunScreen() {
     router.replace('/');
   }, [state.goldEarned, recordRun, router]);
 
+  const removeBurst = useCallback((id: string) => {
+    setParticleBursts((prev) => prev.filter((b) => b.id !== id));
+  }, []);
+
   const livingEnemies = state.enemies.filter((e) => e.hp > 0);
   const recentLog = state.log.slice(-3);
-
   const isPlayerTurn = state.phase === 'player_turn';
 
   return (
     <View style={[styles.root, { paddingTop: topPad }]}>
-      {/* Top bar */}
-      <View style={styles.topBar}>
-        <TouchableOpacity onPress={() => router.replace('/')} style={styles.exitBtn}>
-          <Feather name="x" size={18} color="#6060a0" />
-        </TouchableOpacity>
-        <View style={styles.waveInfo}>
-          <Text style={styles.waveLabel}>
-            {state.wave >= state.maxWaves ? '⚠ BOSS' : `WAVE ${state.wave}/3`}
-          </Text>
-          <Text style={styles.turnLabel}>TURN {state.turn}</Text>
-        </View>
-        <View style={styles.goldRow}>
-          <Feather name="dollar-sign" size={13} color="#ffee00" />
-          <Text style={styles.goldText}>{state.player.gold}</Text>
-        </View>
-      </View>
+      {/* Red screen flash when player is hit */}
+      <Animated.View style={[styles.screenFlash, screenFlashStyle, { pointerEvents: 'none' }]} />
 
-      {/* Enemy zone */}
-      <ScrollView
-        horizontal
-        style={styles.enemyZone}
-        contentContainerStyle={styles.enemyContent}
-        showsHorizontalScrollIndicator={false}
-      >
-        {livingEnemies.length === 0 ? (
-          <View style={styles.noEnemies}>
-            <Text style={styles.noEnemiesText}>Clearing wave...</Text>
+      <Animated.View style={shakeStyle}>
+        {/* Top bar */}
+        <View style={styles.topBar}>
+          <TouchableOpacity onPress={() => router.replace('/')} style={styles.exitBtn}>
+            <Feather name="x" size={18} color="#6060a0" />
+          </TouchableOpacity>
+          <View style={styles.waveInfo}>
+            <Text style={styles.waveLabel}>
+              {state.wave >= state.maxWaves ? '⚠ BOSS' : `WAVE ${state.wave}/3`}
+            </Text>
+            <Text style={styles.turnLabel}>TURN {state.turn}</Text>
           </View>
-        ) : (
-          livingEnemies.map((enemy, i) => (
-            <EnemyView key={enemy.templateId + i} enemy={enemy} index={i} />
-          ))
-        )}
-      </ScrollView>
-
-      {/* Player stats */}
-      <View style={styles.playerSection}>
-        <HealthBar current={state.player.hp} max={state.player.maxHp} label="HP" height={10} />
-        {state.player.shield > 0 && (
-          <View style={styles.shieldRow}>
-            <Feather name="shield" size={12} color="#00f5ff" />
-            <Text style={styles.shieldText}>{state.player.shield} SHIELD</Text>
+          <View style={styles.goldRow}>
+            <Feather name="dollar-sign" size={13} color="#ffee00" />
+            <Text style={styles.goldText}>{state.player.gold}</Text>
           </View>
-        )}
+        </View>
 
-        {/* Energy */}
-        <View style={styles.energyRow}>
-          <Text style={styles.energyLabel}>ENERGY</Text>
-          <View style={styles.energyDots}>
-            {Array.from({ length: state.player.maxEnergy }).map((_, i) => (
-              <View
-                key={i}
-                style={[
-                  styles.energyDot,
-                  { backgroundColor: i < state.player.energy ? '#00f5ff' : '#1a0035', borderColor: i < state.player.energy ? '#00f5ff' : '#2a0060' },
-                ]}
+        {/* Enemy zone */}
+        <View style={styles.enemyZoneWrapper}>
+          {/* Particle bursts - centered in enemy zone */}
+          <View style={styles.particleAnchor} pointerEvents="none">
+            {particleBursts.map((burst) => (
+              <ParticleBurst
+                key={burst.id}
+                type={burst.type}
+                onComplete={() => removeBurst(burst.id)}
               />
             ))}
           </View>
-          <Text style={styles.energyCount}>{state.player.energy}/{state.player.maxEnergy}</Text>
-        </View>
 
-        {/* Synergies */}
-        {state.activeSynergies.length > 0 && (
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.synergyScroll}>
-            {state.activeSynergies.map((s) => <SynergyBadge key={s} synergy={s} />)}
+          <ScrollView
+            horizontal
+            style={styles.enemyZone}
+            contentContainerStyle={styles.enemyContent}
+            showsHorizontalScrollIndicator={false}
+          >
+            {livingEnemies.length === 0 ? (
+              <View style={styles.noEnemies}>
+                <Text style={styles.noEnemiesText}>Clearing wave...</Text>
+              </View>
+            ) : (
+              livingEnemies.map((enemy, i) => (
+                <EnemyView
+                  key={enemy.templateId + i}
+                  enemy={enemy}
+                  index={i}
+                  hitCount={enemyHitCounts[i] ?? 0}
+                />
+              ))
+            )}
           </ScrollView>
-        )}
-      </View>
+        </View>
 
-      {/* Combat Log */}
-      <View style={styles.logBox}>
-        {recentLog.map((line, i) => (
-          <Text key={i} style={[styles.logLine, { opacity: 0.5 + 0.5 * ((i + 1) / recentLog.length) }]} numberOfLines={1}>
-            {line}
-          </Text>
-        ))}
-      </View>
-
-      {/* Hand section */}
-      <View style={styles.handSection}>
-        <View style={styles.deckRow}>
-          <Text style={styles.deckInfo}>
-            <Text style={{ color: '#00f5ff' }}>Hand: {state.hand.length}</Text>
-            {'  '}
-            <Text style={{ color: '#6060a0' }}>Deck: {state.deck.length}</Text>
-            {'  '}
-            <Text style={{ color: '#444466' }}>Disc: {state.discard.length}</Text>
-          </Text>
-          {state.player.zeroCostNext && (
-            <View style={styles.zeroCostBadge}>
-              <Text style={styles.zeroCostText}>NEXT FREE</Text>
+        {/* Player stats */}
+        <View style={styles.playerSection}>
+          <HealthBar current={state.player.hp} max={state.player.maxHp} label="HP" height={10} />
+          {state.player.shield > 0 && (
+            <View style={styles.shieldRow}>
+              <Feather name="shield" size={12} color="#00f5ff" />
+              <Text style={styles.shieldText}>{state.player.shield} SHIELD</Text>
             </View>
+          )}
+
+          {/* Energy */}
+          <View style={styles.energyRow}>
+            <Text style={styles.energyLabel}>ENERGY</Text>
+            <View style={styles.energyDots}>
+              {Array.from({ length: state.player.maxEnergy }).map((_, i) => (
+                <View
+                  key={i}
+                  style={[
+                    styles.energyDot,
+                    {
+                      backgroundColor: i < state.player.energy ? '#00f5ff' : '#1a0035',
+                      borderColor: i < state.player.energy ? '#00f5ff' : '#2a0060',
+                    },
+                  ]}
+                />
+              ))}
+            </View>
+            <Text style={styles.energyCount}>{state.player.energy}/{state.player.maxEnergy}</Text>
+          </View>
+
+          {/* Active synergies */}
+          {state.activeSynergies.length > 0 && (
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.synergyScroll}>
+              {state.activeSynergies.map((s) => <SynergyBadge key={s} synergy={s} />)}
+            </ScrollView>
           )}
         </View>
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.handContent}
+
+        {/* Combat log */}
+        <View style={styles.logBox}>
+          {recentLog.map((line, i) => (
+            <Text
+              key={i}
+              style={[styles.logLine, { opacity: 0.5 + 0.5 * ((i + 1) / Math.max(1, recentLog.length)) }]}
+              numberOfLines={1}
+            >
+              {line}
+            </Text>
+          ))}
+        </View>
+
+        {/* Hand section */}
+        <View style={styles.handSection}>
+          <View style={styles.deckRow}>
+            <Text style={styles.deckInfo}>
+              <Text style={{ color: '#00f5ff' }}>Hand: {state.hand.length}</Text>
+              {'  '}
+              <Text style={{ color: '#6060a0' }}>Deck: {state.deck.length}</Text>
+              {'  '}
+              <Text style={{ color: '#444466' }}>Disc: {state.discard.length}</Text>
+            </Text>
+            {state.player.zeroCostNext && (
+              <View style={styles.zeroCostBadge}>
+                <Text style={styles.zeroCostText}>NEXT FREE</Text>
+              </View>
+            )}
+          </View>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.handContent}
+          >
+            {state.hand.map((card, i) => {
+              const cost = state.player.zeroCostNext ? 0 : card.cost;
+              const canPlay = isPlayerTurn && state.player.energy >= cost;
+              return (
+                <CardView
+                  key={card.instanceId}
+                  card={card}
+                  onPress={() => handlePlayCard(i)}
+                  disabled={!canPlay}
+                />
+              );
+            })}
+            {state.hand.length === 0 && (
+              <View style={styles.emptyHand}>
+                <Text style={styles.emptyHandText}>No cards in hand</Text>
+              </View>
+            )}
+          </ScrollView>
+        </View>
+
+        {/* End Turn button */}
+        <TouchableOpacity
+          style={[
+            styles.endTurnBtn,
+            { marginBottom: botPad + 8 },
+            !isPlayerTurn && styles.endTurnDisabled,
+          ]}
+          onPress={handleEndTurn}
+          disabled={!isPlayerTurn}
         >
-          {state.hand.map((card, i) => {
-            const cost = state.player.zeroCostNext ? 0 : card.cost;
-            const canPlay = isPlayerTurn && state.player.energy >= cost;
-            return (
-              <CardView
-                key={card.instanceId}
-                card={card}
-                onPress={() => handlePlayCard(i)}
-                disabled={!canPlay}
-              />
-            );
-          })}
-          {state.hand.length === 0 && (
-            <View style={styles.emptyHand}>
-              <Text style={styles.emptyHandText}>No cards in hand</Text>
-            </View>
-          )}
-        </ScrollView>
-      </View>
+          <Text style={[styles.endTurnText, !isPlayerTurn && styles.endTurnTextDisabled]}>
+            {isPlayerTurn ? 'END TURN →' : 'ENEMY TURN...'}
+          </Text>
+        </TouchableOpacity>
 
-      {/* End Turn button */}
-      <TouchableOpacity
-        style={[
-          styles.endTurnBtn,
-          { marginBottom: botPad + 8 },
-          !isPlayerTurn && styles.endTurnDisabled,
-        ]}
-        onPress={handleEndTurn}
-        disabled={!isPlayerTurn}
-      >
-        <Text style={styles.endTurnText}>
-          {isPlayerTurn ? 'END TURN →' : 'ENEMY TURN...'}
-        </Text>
-      </TouchableOpacity>
+        {/* Synergy popup (over everything) */}
+        <SynergyPopup synergy={synergyPopup} />
 
-      {/* Overlays */}
-      {state.phase === 'wave_complete' && (
-        <CardSelectOverlay
-          cards={state.pendingCards}
-          wave={state.wave}
-          onSelect={handleSelectCard}
-          onSkip={handleSkipCard}
-        />
-      )}
+        {/* Overlays */}
+        {state.phase === 'wave_complete' && (
+          <CardSelectOverlay
+            cards={state.pendingCards}
+            wave={state.wave}
+            onSelect={handleSelectCard}
+            onSkip={handleSkipCard}
+          />
+        )}
 
-      {state.phase === 'boss_intro' && (
-        <BossIntroOverlay onFight={() => dispatch({ type: 'DISMISS_BOSS_INTRO' })} />
-      )}
+        {state.phase === 'boss_intro' && (
+          <BossIntroOverlay onFight={() => dispatch({ type: 'DISMISS_BOSS_INTRO' })} />
+        )}
 
-      {state.phase === 'victory' && (
-        <VictoryOverlay goldEarned={state.goldEarned} onContinue={handleVictory} />
-      )}
+        {state.phase === 'victory' && (
+          <VictoryOverlay goldEarned={state.goldEarned} onContinue={handleVictory} />
+        )}
 
-      {state.phase === 'game_over' && (
-        <GameOverOverlay
-          goldEarned={state.goldEarned}
-          wave={state.wave}
-          onRetry={handleGameOver}
-        />
-      )}
+        {state.phase === 'game_over' && (
+          <GameOverOverlay goldEarned={state.goldEarned} wave={state.wave} onRetry={handleGameOver} />
+        )}
+      </Animated.View>
     </View>
   );
 }
@@ -482,6 +753,11 @@ const styles = StyleSheet.create({
   root: {
     flex: 1,
     backgroundColor: '#07000f',
+  },
+  screenFlash: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: '#ff0030',
+    zIndex: 999,
   },
   topBar: {
     flexDirection: 'row',
@@ -492,9 +768,7 @@ const styles = StyleSheet.create({
     borderBottomColor: '#2a0060',
     gap: 10,
   },
-  exitBtn: {
-    padding: 4,
-  },
+  exitBtn: { padding: 4 },
   waveInfo: {
     flex: 1,
     flexDirection: 'row',
@@ -529,11 +803,21 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '800',
   },
-  enemyZone: {
+  enemyZoneWrapper: {
     maxHeight: 210,
     minHeight: 160,
     borderBottomWidth: 1,
     borderBottomColor: '#2a0060',
+    position: 'relative',
+  },
+  particleAnchor: {
+    position: 'absolute',
+    top: '50%',
+    left: '50%',
+    zIndex: 10,
+  },
+  enemyZone: {
+    flex: 1,
   },
   enemyContent: {
     padding: 12,
@@ -545,6 +829,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     paddingHorizontal: 20,
+    minWidth: 200,
   },
   noEnemiesText: {
     color: '#6060a0',
@@ -595,9 +880,7 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     marginLeft: 4,
   },
-  synergyScroll: {
-    marginTop: 2,
-  },
+  synergyScroll: { marginTop: 2 },
   logBox: {
     backgroundColor: '#0d001e',
     paddingHorizontal: 14,
@@ -675,5 +958,8 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: '800',
     letterSpacing: 3,
+  },
+  endTurnTextDisabled: {
+    color: '#4040a0',
   },
 });
