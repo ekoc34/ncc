@@ -19,11 +19,47 @@ const queryClient = new QueryClient();
 
 function RootLayoutNav() {
   return (
-    <Stack screenOptions={{ headerShown: false, animation: 'fade' }}>
-      <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-      <Stack.Screen name="run" options={{ headerShown: false, animation: 'slide_from_right' }} />
-      <Stack.Screen name="upgrade" options={{ headerShown: false, animation: 'slide_from_bottom' }} />
-      <Stack.Screen name="settings" options={{ headerShown: false, animation: 'slide_from_bottom' }} />
+    <Stack
+      screenOptions={{
+        headerShown: false,
+        animation: 'fade',
+        animationDuration: 280,
+        contentStyle: { backgroundColor: '#07000f' },
+      }}
+    >
+      <Stack.Screen name="(tabs)" options={{ headerShown: false, animation: 'fade' }} />
+      <Stack.Screen
+        name="run"
+        options={{
+          headerShown: false,
+          animation: 'fade',
+          animationDuration: 320,
+        }}
+      />
+      <Stack.Screen
+        name="run-summary"
+        options={{
+          headerShown: false,
+          animation: 'fade',
+          animationDuration: 400,
+        }}
+      />
+      <Stack.Screen
+        name="upgrade"
+        options={{
+          headerShown: false,
+          animation: 'slide_from_bottom',
+          animationDuration: 300,
+        }}
+      />
+      <Stack.Screen
+        name="settings"
+        options={{
+          headerShown: false,
+          animation: 'slide_from_bottom',
+          animationDuration: 300,
+        }}
+      />
     </Stack>
   );
 }
@@ -48,7 +84,7 @@ export default function RootLayout() {
       <ErrorBoundary>
         <QueryClientProvider client={queryClient}>
           <MetaProvider>
-            <GestureHandlerRootView style={{ flex: 1 }}>
+            <GestureHandlerRootView style={{ flex: 1, backgroundColor: '#07000f' }}>
               <RootLayoutNav />
             </GestureHandlerRootView>
           </MetaProvider>

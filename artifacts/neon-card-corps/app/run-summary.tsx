@@ -9,6 +9,7 @@ import Animated, {
   withSpring,
   withDelay,
   withSequence,
+  Easing,
 } from 'react-native-reanimated';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -18,6 +19,50 @@ import { getRunStats, RunStats, DEFAULT_RUN_STATS } from '@/game/runStats';
 import { getSynergyById } from '@/game/synergies';
 
 const { width: SCREEN_W } = Dimensions.get('window');
+
+// ─── Cinematic Entrance Overlay ──────────────────────────────────────────────
+
+function CinematicEntrance({ won }: { won: boolean }) {
+  const opacity = useSharedValue(1);
+  const scanY = useSharedValue(-20);
+
+  useEffect(() => {
+    scanY.value = withTiming(120, { duration: 600, easing: Easing.out(Easing.cubic) });
+    opacity.value = withDelay(400, withTiming(0, { duration: 500 }));
+  }, []);
+
+  const overlayStyle = useAnimatedStyle(() => ({ opacity: opacity.value }));
+  const scanStyle = useAnimatedStyle(() => ({ transform: [{ translateY: scanY.value }] }));
+
+  return (
+    <Animated.View
+      style={[StyleSheet.absoluteFill, cinematicStyles.overlay, overlayStyle]}
+      pointerEvents="none"
+    >
+      <View style={[StyleSheet.absoluteFill, { backgroundColor: won ? '#00ff8808' : '#ff306008' }]} />
+      <Animated.View style={[cinematicStyles.scanLine, { backgroundColor: won ? '#00ff88' : '#ff3060' }, scanStyle]} />
+    </Animated.View>
+  );
+}
+
+const cinematicStyles = StyleSheet.create({
+  overlay: {
+    backgroundColor: '#07000f',
+    zIndex: 100,
+    overflow: 'hidden',
+  },
+  scanLine: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    height: 2,
+    opacity: 0.8,
+    shadowColor: '#00ff88',
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 1,
+    shadowRadius: 12,
+  },
+});
 
 // ─── Count-up hook ───────────────────────────────────────────────────────────
 
@@ -208,6 +253,7 @@ export default function RunSummaryScreen() {
 
   return (
     <View style={[styles.root, { paddingTop: topPad }]}>
+      <CinematicEntrance won={stats.won} />
       {/* Background glow */}
       <Animated.View
         style={[

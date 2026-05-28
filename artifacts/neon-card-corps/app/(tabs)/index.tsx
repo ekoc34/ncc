@@ -1,280 +1,286 @@
-import React from 'react';
+import React, { useEffect, useCallback } from 'react';
 import {
-  View, Text, TouchableOpacity, StyleSheet, ScrollView, Platform,
+  View, Text, StyleSheet, Alert, Platform,
 } from 'react-native';
+import Animated, {
+  useSharedValue,
+  useAnimatedStyle,
+  withTiming,
+  withRepeat,
+  withSequence,
+  withDelay,
+  Easing,
+} from 'react-native-reanimated';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
 import { useMeta } from '@/context/MetaContext';
 import { playSound, resumeAudio } from '@/game/audio';
+import AnimatedBackground from '@/components/AnimatedBackground';
+import NeonLogo from '@/components/NeonLogo';
+import { PrimaryButton, SecondaryButton } from '@/components/PremiumButton';
+
+function StatsBar({ runs, wins, gold }: { runs: number; wins: number; gold: number }) {
+  const opacity = useSharedValue(0);
+  const ty = useSharedValue(10);
+
+  useEffect(() => {
+    opacity.value = withDelay(500, withTiming(1, { duration: 600 }));
+    ty.value = withDelay(500, withTiming(0, { duration: 600, easing: Easing.out(Easing.cubic) }));
+  }, []);
+
+  const style = useAnimatedStyle(() => ({
+    opacity: opacity.value,
+    transform: [{ translateY: ty.value }],
+  }));
+
+  const winRate = runs > 0 ? Math.round((wins / runs) * 100) : 0;
+
+  return (
+    <Animated.View style={[styles.statsContainer, style]}>
+      <View style={styles.statsInner}>
+        <StatItem value={runs} label="RUNS" color="#00f5ff" />
+        <View style={styles.statsDivider} />
+        <StatItem value={wins} label="WINS" color="#00ff88" />
+        <View style={styles.statsDivider} />
+        <StatItem value={`${winRate}%`} label="WIN RATE" color="#ff00ff" />
+        <View style={styles.statsDivider} />
+        <StatItem value={gold} label="GOLD" color="#ffee00" />
+      </View>
+    </Animated.View>
+  );
+}
+
+function StatItem({ value, label, color }: { value: number | string; label: string; color: string }) {
+  return (
+    <View style={styles.statItem}>
+      <Text style={[styles.statValue, { color }]}>{value}</Text>
+      <Text style={styles.statLabel}>{label}</Text>
+    </View>
+  );
+}
+
+function ButtonsSection({
+  onStartRun,
+  onUpgrades,
+  onSettings,
+  onCredits,
+  gold,
+}: {
+  onStartRun: () => void;
+  onUpgrades: () => void;
+  onSettings: () => void;
+  onCredits: () => void;
+  gold: number;
+}) {
+  const opacity = useSharedValue(0);
+  const ty = useSharedValue(20);
+
+  useEffect(() => {
+    opacity.value = withDelay(300, withTiming(1, { duration: 700 }));
+    ty.value = withDelay(300, withTiming(0, { duration: 700, easing: Easing.out(Easing.cubic) }));
+  }, []);
+
+  const style = useAnimatedStyle(() => ({
+    opacity: opacity.value,
+    transform: [{ translateY: ty.value }],
+  }));
+
+  return (
+    <Animated.View style={[styles.btnSection, style]}>
+      <PrimaryButton label="START RUN" onPress={onStartRun} icon="play" />
+
+      <View style={styles.secondaryRow}>
+        <SecondaryButton
+          label="UPGRADES"
+          onPress={onUpgrades}
+          icon="trending-up"
+          badge={gold > 0 ? `${gold}G` : undefined}
+          accentColor="#7b2fff"
+          style={{ flex: 1 }}
+        />
+        <SecondaryButton
+          label="SETTINGS"
+          onPress={onSettings}
+          icon="settings"
+          accentColor="#00f5ff"
+          style={{ flex: 1 }}
+        />
+      </View>
+
+      <SecondaryButton
+        label="CREDITS"
+        onPress={onCredits}
+        icon="star"
+        accentColor="#ff00ff"
+      />
+    </Animated.View>
+  );
+}
+
+function BottomBar() {
+  const pulse = useSharedValue(0.4);
+
+  useEffect(() => {
+    pulse.value = withRepeat(
+      withSequence(
+        withTiming(1, { duration: 2500, easing: Easing.inOut(Easing.sine) }),
+        withTiming(0.3, { duration: 2500, easing: Easing.inOut(Easing.sine) }),
+      ),
+      -1,
+      true,
+    );
+  }, []);
+
+  const dotStyle = useAnimatedStyle(() => ({ opacity: pulse.value }));
+
+  return (
+    <View style={styles.bottomBar}>
+      <Animated.View style={[styles.bottomDot, dotStyle]} />
+      <Text style={styles.bottomText}>SINGLE PLAYER  ·  ROGUELIKE  ·  DECKBUILDER</Text>
+      <Animated.View style={[styles.bottomDot, dotStyle]} />
+    </View>
+  );
+}
 
 export default function MainMenu() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { meta, isLoaded } = useMeta();
 
-  const topPad = Platform.OS === 'web' ? 67 : insets.top;
-  const botPad = Platform.OS === 'web' ? 34 : insets.bottom;
+  const topPad = Platform.OS === 'web' ? 52 : insets.top;
+  const botPad = Platform.OS === 'web' ? 28 : insets.bottom;
 
-  const startRun = () => {
+  const startRun = useCallback(() => {
     resumeAudio();
     playSound('button_primary');
     router.push({
       pathname: '/run',
       params: { upgrades: JSON.stringify(meta.upgrades) },
     });
-  };
+  }, [meta.upgrades, router]);
+
+  const goUpgrades = useCallback(() => {
+    playSound('button_click');
+    router.push('/upgrade');
+  }, [router]);
+
+  const goSettings = useCallback(() => {
+    playSound('button_click');
+    router.push('/settings');
+  }, [router]);
+
+  const showCredits = useCallback(() => {
+    playSound('button_click');
+    Alert.alert(
+      'NEON CARD CORPS',
+      'A cyberpunk roguelike deckbuilder.\n\nDesign & Development\nCorp Edition v1.0\n\n"The net is dark and full of enemies."\n\n© 2026 Neon Card Corps',
+      [{ text: 'CLOSE', style: 'cancel' }],
+    );
+  }, []);
 
   return (
-    <View style={[styles.container, { paddingTop: topPad + 20, paddingBottom: botPad + 20 }]}>
-      {/* Logo */}
-      <View style={styles.logoBlock}>
-        <View style={styles.logoAccent} />
-        <Text style={styles.logoSub}>// CORP EDITION v1.0</Text>
-        <Text style={styles.logoTitle}>NEON</Text>
-        <Text style={styles.logoTitle2}>CARD CORPS</Text>
-        <Text style={styles.tagline}>CYBERPUNK ROGUELIKE DECKBUILDER</Text>
-        <View style={styles.logoDivider} />
+    <AnimatedBackground>
+      <View
+        style={[
+          styles.overlay,
+          { paddingTop: topPad + 16, paddingBottom: botPad + 16 },
+        ]}
+      >
+        <NeonLogo />
+
+        <View style={styles.divider} />
+
+        <ButtonsSection
+          onStartRun={startRun}
+          onUpgrades={goUpgrades}
+          onSettings={goSettings}
+          onCredits={showCredits}
+          gold={isLoaded ? meta.totalGold : 0}
+        />
+
+        {isLoaded && (
+          <StatsBar
+            runs={meta.totalRuns}
+            wins={meta.totalWins}
+            gold={meta.totalGold}
+          />
+        )}
+
+        <BottomBar />
       </View>
-
-      {/* Stats */}
-      {isLoaded && (
-        <View style={styles.statsRow}>
-          <View style={styles.statBlock}>
-            <Text style={styles.statValue}>{meta.totalRuns}</Text>
-            <Text style={styles.statLabel}>RUNS</Text>
-          </View>
-          <View style={styles.statDivider} />
-          <View style={styles.statBlock}>
-            <Text style={styles.statValue}>{meta.totalWins}</Text>
-            <Text style={styles.statLabel}>WINS</Text>
-          </View>
-          <View style={styles.statDivider} />
-          <View style={styles.statBlock}>
-            <Text style={[styles.statValue, { color: '#ffee00' }]}>{meta.totalGold}</Text>
-            <Text style={styles.statLabel}>GOLD</Text>
-          </View>
-        </View>
-      )}
-
-      {/* Main buttons */}
-      <View style={styles.btnGroup}>
-        <TouchableOpacity style={styles.startBtn} onPress={startRun}>
-          <View style={styles.startBtnInner}>
-            <Feather name="play" size={22} color="#07000f" />
-            <Text style={styles.startBtnText}>START RUN</Text>
-          </View>
-          <View style={styles.startBtnGlow} />
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={styles.secondaryBtn}
-          onPress={() => { playSound('button_click'); router.push('/upgrade'); }}
-        >
-          <Feather name="trending-up" size={18} color="#7b2fff" />
-          <Text style={styles.secondaryBtnText}>UPGRADES</Text>
-          {isLoaded && meta.totalGold > 0 && (
-            <View style={styles.goldBadge}>
-              <Text style={styles.goldBadgeText}>{meta.totalGold} G</Text>
-            </View>
-          )}
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={styles.secondaryBtn}
-          onPress={() => { playSound('button_click'); router.push('/settings'); }}
-        >
-          <Feather name="settings" size={18} color="#7b2fff" />
-          <Text style={styles.secondaryBtnText}>SETTINGS</Text>
-        </TouchableOpacity>
-      </View>
-
-      {/* How to play */}
-      <View style={styles.howTo}>
-        <Text style={styles.howToTitle}>HOW TO PLAY</Text>
-        <Text style={styles.howToText}>
-          Play cards to defeat enemy waves. Choose new cards after each wave.{'\n'}
-          Beat 3 waves + the boss to win. Spend gold on permanent upgrades.
-        </Text>
-      </View>
-
-      {/* Bottom decoration */}
-      <View style={styles.bottomBar}>
-        <Text style={styles.bottomText}>SINGLE PLAYER · ROGUELIKE · DECKBUILDER</Text>
-      </View>
-    </View>
+    </AnimatedBackground>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
+  overlay: {
     flex: 1,
-    backgroundColor: '#07000f',
-    paddingHorizontal: 24,
+    paddingHorizontal: 22,
     justifyContent: 'space-between',
   },
-  logoBlock: {
-    alignItems: 'flex-start',
-  },
-  logoAccent: {
-    width: 40,
-    height: 3,
-    backgroundColor: '#00f5ff',
-    marginBottom: 12,
-    borderRadius: 2,
-  },
-  logoSub: {
-    color: '#8888bb',
-    fontSize: 11,
-    fontWeight: '600',
-    letterSpacing: 2,
-    marginBottom: 4,
-  },
-  logoTitle: {
-    color: '#00f5ff',
-    fontSize: 52,
-    fontWeight: '800',
-    letterSpacing: 8,
-    lineHeight: 56,
-    textShadowColor: '#00f5ff',
-    textShadowOffset: { width: 0, height: 0 },
-    textShadowRadius: 20,
-  },
-  logoTitle2: {
-    color: '#e0e0ff',
-    fontSize: 36,
-    fontWeight: '800',
-    letterSpacing: 4,
-    lineHeight: 40,
-    marginBottom: 8,
-  },
-  tagline: {
-    color: '#7b2fff',
-    fontSize: 9,
-    fontWeight: '700',
-    letterSpacing: 3,
-  },
-  logoDivider: {
-    width: '100%',
+  divider: {
     height: 1,
-    backgroundColor: '#2a0060',
-    marginTop: 16,
+    backgroundColor: '#2a006055',
+    marginVertical: 10,
   },
-  statsRow: {
+  btnSection: {
+    gap: 10,
+  },
+  secondaryRow: {
     flexDirection: 'row',
-    justifyContent: 'space-around',
-    backgroundColor: '#120028',
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: '#2a0060',
-    paddingVertical: 12,
+    gap: 10,
   },
-  statBlock: {
+  statsContainer: {
+    borderRadius: 12,
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: '#2a0060aa',
+  },
+  statsInner: {
+    backgroundColor: '#0d001ecc',
+    flexDirection: 'row',
+    paddingVertical: 12,
+    paddingHorizontal: 4,
+    justifyContent: 'space-around',
     alignItems: 'center',
   },
+  statItem: {
+    alignItems: 'center',
+    flex: 1,
+  },
   statValue: {
-    color: '#00f5ff',
-    fontSize: 22,
+    fontSize: 18,
     fontWeight: '800',
+    letterSpacing: 1,
   },
   statLabel: {
-    color: '#6060a0',
-    fontSize: 9,
+    color: '#555588',
+    fontSize: 8,
     fontWeight: '700',
     letterSpacing: 1.5,
     marginTop: 2,
   },
-  statDivider: {
+  statsDivider: {
     width: 1,
+    height: 28,
     backgroundColor: '#2a0060',
   },
-  btnGroup: {
-    gap: 10,
-  },
-  startBtn: {
-    borderRadius: 12,
-    overflow: 'hidden',
-    position: 'relative',
-  },
-  startBtnInner: {
-    backgroundColor: '#00f5ff',
+  bottomBar: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 18,
-    gap: 10,
-    borderRadius: 12,
-  },
-  startBtnGlow: {
-    position: 'absolute',
-    inset: 0,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: '#00f5ff',
-    opacity: 0.3,
-  },
-  startBtnText: {
-    color: '#07000f',
-    fontSize: 18,
-    fontWeight: '800',
-    letterSpacing: 3,
-  },
-  secondaryBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#120028',
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: '#2a0060',
-    paddingVertical: 14,
-    paddingHorizontal: 20,
     gap: 10,
   },
-  secondaryBtnText: {
-    color: '#e0e0ff',
-    fontSize: 14,
-    fontWeight: '700',
-    letterSpacing: 2,
-    flex: 1,
-  },
-  goldBadge: {
-    backgroundColor: '#ffee0033',
-    borderRadius: 6,
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderWidth: 1,
-    borderColor: '#ffee00',
-  },
-  goldBadgeText: {
-    color: '#ffee00',
-    fontSize: 11,
-    fontWeight: '700',
-  },
-  howTo: {
-    backgroundColor: '#120028',
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: '#2a0060',
-    padding: 14,
-  },
-  howToTitle: {
-    color: '#6060a0',
-    fontSize: 9,
-    fontWeight: '700',
-    letterSpacing: 2,
-    marginBottom: 6,
-  },
-  howToText: {
-    color: '#8888bb',
-    fontSize: 12,
-    lineHeight: 18,
-  },
-  bottomBar: {
-    alignItems: 'center',
+  bottomDot: {
+    width: 4,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: '#3a0080',
   },
   bottomText: {
-    color: '#2a0060',
-    fontSize: 9,
+    color: '#3a0080',
+    fontSize: 8.5,
     letterSpacing: 2,
     fontWeight: '600',
   },

@@ -1,0 +1,20 @@
+kind = "mobile"
+previewPath = "/neon-card-corps"
+title = "Neon Card Corps"
+version = "1.0.0"
+id = "neon-card-corps-app"
+
+[[services]]
+localPort = 8082
+name = "expo"
+paths = ["/neon-card-corps"]
+
+[services.env]
+PORT = "8082"
+
+[services.development]
+run = "pnpm --filter @workspace/neon-card-corps run dev"
+
+[services.production]
+build = "pnpm --filter @workspace/neon-card-corps run build"
+run = "pnpm --filter @workspace/neon-card-corps run serve"

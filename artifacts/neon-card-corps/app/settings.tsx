@@ -1,7 +1,10 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity, Switch, ScrollView, Platform,
 } from 'react-native';
+import Animated, {
+  useSharedValue, useAnimatedStyle, withTiming, withDelay, Easing,
+} from 'react-native-reanimated';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
@@ -61,13 +64,47 @@ function VolumeRow({
   );
 }
 
+function SectionCard({ children }: { children: React.ReactNode }) {
+  return <View style={styles.card}>{children}</View>;
+}
+
+function CardDivider() {
+  return <View style={styles.cardDivider} />;
+}
+
+function InfoRow({ label, value }: { label: string; value: string }) {
+  return (
+    <View style={styles.row}>
+      <Text style={styles.rowLabel}>{label}</Text>
+      <Text style={styles.rowValue}>{value}</Text>
+    </View>
+  );
+}
+
+function AnimatedSection({ children, delay = 0 }: { children: React.ReactNode; delay?: number }) {
+  const opacity = useSharedValue(0);
+  const ty = useSharedValue(12);
+
+  useEffect(() => {
+    opacity.value = withDelay(delay, withTiming(1, { duration: 400 }));
+    ty.value = withDelay(delay, withTiming(0, { duration: 400, easing: Easing.out(Easing.cubic) }));
+  }, []);
+
+  const style = useAnimatedStyle(() => ({
+    opacity: opacity.value,
+    transform: [{ translateY: ty.value }],
+  }));
+
+  return <Animated.View style={style}>{children}</Animated.View>;
+}
+
 export default function SettingsScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { settings, setMuted, setSfxVolume, setMusicVolume } = useAudioSettings();
 
-  const topPad = Platform.OS === 'web' ? 67 : insets.top;
-  const botPad = Platform.OS === 'web' ? 34 : insets.bottom;
+  const topPad = Platform.OS === 'web' ? 52 : insets.top;
+  const botPad = Platform.OS === 'web' ? 28 : insets.bottom;
 
   return (
     <View style={[styles.container, { paddingTop: topPad, paddingBottom: botPad }]}>
@@ -78,24 +115,29 @@ export default function SettingsScreen() {
             router.back();
           }}
           style={styles.backBtn}
+          activeOpacity={0.7}
         >
-          <Feather name="arrow-left" size={22} color="#8888bb" />
+          <View style={styles.backBtnInner}>
+            <Feather name="arrow-left" size={18} color="#8888bb" />
+          </View>
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>SETTINGS</Text>
+        <View style={styles.headerTitleRow}>
+          <View style={styles.headerAccent} />
+          <Text style={styles.headerTitle}>SETTINGS</Text>
+        </View>
       </View>
 
-      <ScrollView style={styles.list} showsVerticalScrollIndicator={false}>
+      <ScrollView style={styles.list} showsVerticalScrollIndicator={false} contentContainerStyle={styles.listContent}>
 
-        {/* ── AUDIO ────────────────────────────────────────── */}
-        <View style={styles.section}>
+        <AnimatedSection delay={0}>
           <Text style={styles.sectionTitle}>AUDIO</Text>
-          <View style={styles.card}>
-
-            {/* Mute all */}
+          <SectionCard>
             <View style={styles.row}>
               <View style={styles.rowLeft}>
-                <Feather name={settings.isMuted ? 'volume-x' : 'volume-2'} size={16} color="#8888bb" />
-                <Text style={[styles.rowLabel, { marginLeft: 8 }]}>Mute All</Text>
+                <View style={styles.rowIconWrap}>
+                  <Feather name={settings.isMuted ? 'volume-x' : 'volume-2'} size={15} color="#7b2fff" />
+                </View>
+                <Text style={styles.rowLabel}>Mute All</Text>
               </View>
               <Switch
                 value={settings.isMuted}
@@ -104,76 +146,66 @@ export default function SettingsScreen() {
                   setMuted(v);
                   if (!v) setTimeout(() => playSound('button_click'), 80);
                 }}
-                trackColor={{ false: '#2a0060', true: '#7b2fff' }}
-                thumbColor={settings.isMuted ? '#e0e0ff' : '#00f5ff'}
+                trackColor={{ false: '#1a0035', true: '#7b2fff55' }}
+                thumbColor={settings.isMuted ? '#7b2fff' : '#00f5ff'}
               />
             </View>
-
-            <View style={styles.divider} />
-
-            {/* SFX volume */}
+            <CardDivider />
             <VolumeRow
               label="SFX"
               value={settings.sfxVolume}
               onChange={setSfxVolume}
               disabled={settings.isMuted}
             />
-
-            <View style={styles.divider} />
-
-            {/* Music volume */}
+            <CardDivider />
             <VolumeRow
               label="MUSIC"
               value={settings.musicVolume}
               onChange={setMusicVolume}
               disabled={settings.isMuted}
             />
-
-          </View>
-
-          <Text style={styles.audioHint}>
-            Audio is synthesized — no downloads required. Works in browser only on iOS/Android native builds.
+          </SectionCard>
+          <Text style={styles.hint}>
+            Audio is synthesized — no external downloads required.
           </Text>
-        </View>
+        </AnimatedSection>
 
-        {/* ── ABOUT ────────────────────────────────────────── */}
-        <View style={styles.section}>
+        <AnimatedSection delay={120}>
           <Text style={styles.sectionTitle}>ABOUT</Text>
-          <View style={styles.card}>
-            <View style={styles.row}>
-              <Text style={styles.rowLabel}>Game</Text>
-              <Text style={styles.rowValue}>Neon Card Corps</Text>
-            </View>
-            <View style={styles.divider} />
-            <View style={styles.row}>
-              <Text style={styles.rowLabel}>Version</Text>
-              <Text style={styles.rowValue}>1.0.0</Text>
-            </View>
-            <View style={styles.divider} />
-            <View style={styles.row}>
-              <Text style={styles.rowLabel}>Genre</Text>
-              <Text style={styles.rowValue}>Roguelike Deckbuilder</Text>
-            </View>
-          </View>
-        </View>
+          <SectionCard>
+            <InfoRow label="Game" value="Neon Card Corps" />
+            <CardDivider />
+            <InfoRow label="Edition" value="Corp Edition v1.0" />
+            <CardDivider />
+            <InfoRow label="Build" value="2026.05.28" />
+            <CardDivider />
+            <InfoRow label="Genre" value="Roguelike Deckbuilder" />
+            <CardDivider />
+            <InfoRow label="Platform" value="iOS · Android · Web" />
+          </SectionCard>
+        </AnimatedSection>
 
-        {/* ── GAMEPLAY TIPS ─────────────────────────────────── */}
-        <View style={styles.section}>
+        <AnimatedSection delay={220}>
           <Text style={styles.sectionTitle}>GAMEPLAY TIPS</Text>
           {[
-            ['⚡ Lightning Synergy', 'Stack 2+ lightning cards to deal chain damage to all enemies at once.'],
-            ['🔥 Fire + Burn', 'Burn stacks deal 1 damage per turn. Fire synergy doubles it to 2.'],
-            ['❄ Ice Freeze', 'Frozen enemies skip their attack. Ice synergy amplifies damage to frozen foes.'],
-            ['⚙ Tech Overclock', 'Use Overclock to play your most expensive card for free.'],
-            ['🌑 Void Drain', 'Void cards heal you on hit. Void synergy lets them bypass enemy armor.'],
-            ['👾 NEXUS-7 Boss', 'The boss enrages on turn 3. Build up shield and burn before that happens.'],
-          ].map(([title, text]) => (
+            { icon: 'zap', color: '#ffee00', title: 'Lightning Synergy', text: 'Stack 2+ lightning cards to chain damage all enemies at once.' },
+            { icon: 'flame', color: '#ff6030', title: 'Fire + Burn', text: 'Burn stacks deal 1 damage per turn. Fire synergy doubles burn to 2.' },
+            { icon: 'wind', color: '#80e8ff', title: 'Ice Freeze', text: 'Frozen enemies skip their attack. Ice synergy amplifies damage to frozen foes.' },
+            { icon: 'cpu', color: '#00ff88', title: 'Tech Overclock', text: 'Overclock lets you play your most expensive card for free.' },
+            { icon: 'moon', color: '#aa60ff', title: 'Void Drain', text: 'Void cards heal on hit. Void synergy lets them bypass enemy armor.' },
+            { icon: 'alert-octagon', color: '#ff3060', title: 'NEXUS-7 Boss', text: 'The boss enrages on turn 3. Build shield and burn before that happens.' },
+          ].map(({ icon, color, title, text }) => (
             <View key={title} style={styles.tipCard}>
-              <Text style={styles.tipTitle}>{title}</Text>
-              <Text style={styles.tipText}>{text}</Text>
+              <View style={[styles.tipIcon, { backgroundColor: color + '20', borderColor: color + '50' }]}>
+                <Feather name={icon as any} size={14} color={color} />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.tipTitle}>{title}</Text>
+                <Text style={styles.tipText}>{text}</Text>
+              </View>
             </View>
           ))}
-        </View>
+        </AnimatedSection>
 
       </ScrollView>
     </View>
@@ -190,7 +222,7 @@ const volStyles = StyleSheet.create({
   },
   label: {
     color: '#8888bb',
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: '600',
     letterSpacing: 1,
   },
@@ -199,25 +231,25 @@ const volStyles = StyleSheet.create({
     gap: 6,
   },
   step: {
-    backgroundColor: '#1a0038',
-    borderRadius: 6,
+    backgroundColor: '#120028',
+    borderRadius: 8,
     borderWidth: 1,
     borderColor: '#2a0060',
     paddingHorizontal: 12,
-    paddingVertical: 6,
+    paddingVertical: 7,
   },
   stepActive: {
     backgroundColor: '#7b2fff22',
     borderColor: '#7b2fff',
   },
   stepDisabled: {
-    opacity: 0.35,
+    opacity: 0.3,
   },
   stepText: {
-    color: '#6060a0',
+    color: '#555588',
     fontSize: 11,
     fontWeight: '700',
-    letterSpacing: 1,
+    letterSpacing: 0.8,
   },
   stepTextActive: {
     color: '#e0e0ff',
@@ -232,41 +264,71 @@ const styles = StyleSheet.create({
   header: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingVertical: 14,
+    paddingHorizontal: 18,
+    paddingVertical: 12,
     borderBottomWidth: 1,
-    borderBottomColor: '#2a0060',
+    borderBottomColor: '#1e0040',
+    gap: 12,
   },
   backBtn: {
-    padding: 4,
-    marginRight: 12,
+    padding: 2,
+  },
+  backBtnInner: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    backgroundColor: '#120028',
+    borderWidth: 1,
+    borderColor: '#2a0060',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  headerTitleRow: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  headerAccent: {
+    width: 3,
+    height: 20,
+    borderRadius: 2,
+    backgroundColor: '#00f5ff',
   },
   headerTitle: {
     color: '#e0e0ff',
-    fontSize: 18,
+    fontSize: 16,
     fontWeight: '800',
     letterSpacing: 4,
   },
   list: {
     flex: 1,
-    padding: 16,
   },
-  section: {
-    marginBottom: 24,
+  listContent: {
+    padding: 18,
+    paddingBottom: 40,
+    gap: 6,
   },
   sectionTitle: {
-    color: '#6060a0',
-    fontSize: 10,
-    fontWeight: '700',
-    letterSpacing: 2,
-    marginBottom: 10,
+    color: '#444477',
+    fontSize: 9,
+    fontWeight: '800',
+    letterSpacing: 2.5,
+    marginBottom: 8,
+    marginTop: 16,
+    paddingLeft: 2,
   },
   card: {
-    backgroundColor: '#120028',
-    borderRadius: 12,
+    backgroundColor: '#0d001e',
+    borderRadius: 14,
     borderWidth: 1,
     borderColor: '#2a0060',
     overflow: 'hidden',
+  },
+  cardDivider: {
+    height: 1,
+    backgroundColor: '#1a0035',
+    marginHorizontal: 14,
   },
   row: {
     flexDirection: 'row',
@@ -278,45 +340,64 @@ const styles = StyleSheet.create({
   rowLeft: {
     flexDirection: 'row',
     alignItems: 'center',
+    gap: 10,
+  },
+  rowIconWrap: {
+    width: 30,
+    height: 30,
+    borderRadius: 8,
+    backgroundColor: '#7b2fff20',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   rowLabel: {
-    color: '#8888bb',
-    fontSize: 14,
+    color: '#9090b8',
+    fontSize: 13,
+    fontWeight: '500',
   },
   rowValue: {
-    color: '#e0e0ff',
-    fontSize: 14,
+    color: '#d0d0f0',
+    fontSize: 13,
     fontWeight: '600',
   },
-  divider: {
-    height: 1,
-    backgroundColor: '#2a0060',
-    marginHorizontal: 14,
-  },
-  audioHint: {
-    color: '#404060',
+  hint: {
+    color: '#333355',
     fontSize: 10,
     marginTop: 8,
     lineHeight: 15,
     paddingHorizontal: 4,
+    letterSpacing: 0.2,
   },
   tipCard: {
-    backgroundColor: '#120028',
-    borderRadius: 10,
+    backgroundColor: '#0d001e',
+    borderRadius: 12,
     borderWidth: 1,
     borderColor: '#2a0060',
     padding: 12,
     marginBottom: 8,
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 12,
+  },
+  tipIcon: {
+    width: 32,
+    height: 32,
+    borderRadius: 8,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0,
+    marginTop: 1,
   },
   tipTitle: {
-    color: '#e0e0ff',
+    color: '#c0c0e0',
     fontSize: 13,
     fontWeight: '700',
-    marginBottom: 4,
+    marginBottom: 3,
   },
   tipText: {
-    color: '#8888bb',
-    fontSize: 12,
-    lineHeight: 18,
+    color: '#707098',
+    fontSize: 11,
+    lineHeight: 17,
   },
 });

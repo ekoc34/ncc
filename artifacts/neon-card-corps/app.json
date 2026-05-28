@@ -3,11 +3,14 @@
     "name": "Neon Card Corps",
     "slug": "neon-card-corps",
     "version": "1.0.0",
+    "runtimeVersion": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "neon-card-corps",
     "userInterfaceStyle": "dark",
     "newArchEnabled": true,
+    "backgroundColor": "#07000f",
+    "primaryColor": "#00f5ff",
     "splash": {
       "image": "./assets/images/splash.png",
       "resizeMode": "cover",
@@ -15,16 +18,26 @@
     },
     "ios": {
       "supportsTablet": false,
-      "bundleIdentifier": "com.neoncard.corps"
+      "bundleIdentifier": "com.neoncard.corps",
+      "buildNumber": "1",
+      "requireFullScreen": true,
+      "infoPlist": {
+        "UIStatusBarStyle": "UIStatusBarStyleLightContent",
+        "UIViewControllerBasedStatusBarAppearance": false
+      }
     },
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/icon.png",
         "backgroundColor": "#07000f"
-      }
+      },
+      "package": "com.neoncard.corps",
+      "versionCode": 1,
+      "softwareKeyboardLayoutMode": "pan"
     },
     "web": {
-      "favicon": "./assets/images/icon.png"
+      "favicon": "./assets/images/icon.png",
+      "bundler": "metro"
     },
     "plugins": [
       [
@@ -39,6 +52,9 @@
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": true
-    }
+    },
+    "description": "A cyberpunk roguelike deckbuilder. Battle through neon-soaked corporate wastelands using synergistic card combos. Premium indie game experience.",
+    "githubUrl": "",
+    "privacy": "unlisted"
   }
 }
