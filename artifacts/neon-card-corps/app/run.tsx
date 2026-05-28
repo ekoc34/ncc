@@ -18,6 +18,7 @@ import { Feather } from '@expo/vector-icons';
 import { combatReducer, buildInitialState } from '@/game/engine';
 import { Card, SynergyType } from '@/game/types';
 import { useMeta } from '@/context/MetaContext';
+import { setRunStats } from '@/game/runStats';
 import CardView from '@/components/CardView';
 import EnemyView from '@/components/EnemyView';
 import HealthBar from '@/components/HealthBar';
@@ -398,6 +399,15 @@ export default function RunScreen() {
   const prevSynergiesRef = useRef<SynergyType[]>([]);
   const synergyPopupTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  // ── Run stat tracking refs (no re-renders) ─────────────────────────────────
+  const totalDamageRef = useRef(0);
+  const highestHitRef = useRef(0);
+  const cardsPlayedRef = useRef(0);
+  const bossDamageRef = useRef(0);
+  const tagUsageRef = useRef<Record<string, number>>({});
+  const cardUsageRef = useRef<Record<string, { name: string; count: number }>>({});
+  const synergyHistoryRef = useRef<Set<string>>(new Set());
+
   // Screenshake
   const shakeX = useSharedValue(0);
   const shakeStyle = useAnimatedStyle(() => ({
@@ -433,6 +443,10 @@ export default function RunScreen() {
           maxDmg = Math.max(maxDmg, dmg);
           newCounts[i] = (newCounts[i] ?? 0) + 1;
           anyHit = true;
+          // Track stats
+          totalDamageRef.current += dmg;
+          if (dmg > highestHitRef.current) highestHitRef.current = dmg;
+          if (state.enemies[i]?.isBoss) bossDamageRef.current += dmg;
         }
       });
 
@@ -495,6 +509,8 @@ export default function RunScreen() {
       setSynergyPopup(newlyActive[0]);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       synergyPopupTimer.current = setTimeout(() => setSynergyPopup(null), 2200);
+      // Track synergy history
+      newlyActive.forEach((s) => synergyHistoryRef.current.add(s));
     }
 
     prevSynergiesRef.current = curr;
@@ -518,6 +534,15 @@ export default function RunScreen() {
     if (state.player.energy < cost) return;
     // Store tags for particle type
     lastPlayedTagsRef.current = card.tags;
+    // Track stats
+    cardsPlayedRef.current++;
+    card.tags.forEach((tag) => {
+      tagUsageRef.current[tag] = (tagUsageRef.current[tag] ?? 0) + 1;
+    });
+    if (!cardUsageRef.current[card.id]) {
+      cardUsageRef.current[card.id] = { name: card.name, count: 0 };
+    }
+    cardUsageRef.current[card.id].count++;
     dispatch({ type: 'PLAY_CARD', cardIndex: index });
   }, [state.hand, state.player.energy, state.player.zeroCostNext]);
 
@@ -538,13 +563,41 @@ export default function RunScreen() {
   const handleVictory = useCallback(async () => {
     await addGold(state.goldEarned);
     await recordRun(true, state.goldEarned * 10);
-    router.replace('/upgrade');
-  }, [state.goldEarned, addGold, recordRun, router]);
+    setRunStats({
+      won: true,
+      wave: state.wave,
+      totalDamage: totalDamageRef.current,
+      highestHit: highestHitRef.current,
+      cardsPlayed: cardsPlayedRef.current,
+      synergiesActivated: Array.from(synergyHistoryRef.current),
+      turnsSurvived: state.turn,
+      tagUsage: { ...tagUsageRef.current },
+      bossDamage: bossDamageRef.current,
+      goldEarned: state.goldEarned,
+      cardUsage: { ...cardUsageRef.current },
+      activeSynergies: state.activeSynergies,
+    });
+    router.replace('/run-summary');
+  }, [state.goldEarned, state.wave, state.turn, state.activeSynergies, addGold, recordRun, router]);
 
   const handleGameOver = useCallback(async () => {
     await recordRun(false, state.goldEarned * 10);
-    router.replace('/');
-  }, [state.goldEarned, recordRun, router]);
+    setRunStats({
+      won: false,
+      wave: state.wave,
+      totalDamage: totalDamageRef.current,
+      highestHit: highestHitRef.current,
+      cardsPlayed: cardsPlayedRef.current,
+      synergiesActivated: Array.from(synergyHistoryRef.current),
+      turnsSurvived: state.turn,
+      tagUsage: { ...tagUsageRef.current },
+      bossDamage: bossDamageRef.current,
+      goldEarned: state.goldEarned,
+      cardUsage: { ...cardUsageRef.current },
+      activeSynergies: state.activeSynergies,
+    });
+    router.replace('/run-summary');
+  }, [state.goldEarned, state.wave, state.turn, state.activeSynergies, recordRun, router]);
 
   const removeBurst = useCallback((id: string) => {
     setParticleBursts((prev) => prev.filter((b) => b.id !== id));
