@@ -191,7 +191,7 @@ function applyCardEffect(
         for (const t of targets) {
           const idx = ens.indexOf(t);
           const existing = t.statusEffects.find((e) => e.kind === 'burn') as { kind: 'burn'; stacks: number } | undefined;
-          const newEffects = t.statusEffects.filter((e) => e.kind !== 'burn');
+          const newEffects: StatusEffect[] = t.statusEffects.filter((e) => e.kind !== 'burn');
           newEffects.push({ kind: 'burn', stacks: (existing?.stacks ?? 0) + effect.amount });
           ens[idx] = { ...t, statusEffects: newEffects };
           logs.push(`Apply ${effect.amount} Burn to ${t.name}.`);
@@ -202,7 +202,7 @@ function applyCardEffect(
     case 'freeze': {
       if (firstAlive >= 0) {
         const e = ens[firstAlive];
-        const newEffects = e.statusEffects.filter((ef) => ef.kind !== 'freeze');
+        const newEffects: StatusEffect[] = e.statusEffects.filter((ef) => ef.kind !== 'freeze');
         newEffects.push({ kind: 'freeze', turns: effect.turns });
         ens[firstAlive] = { ...e, statusEffects: newEffects };
         logs.push(`${e.name} is frozen for ${effect.turns} turn(s)!`);
@@ -234,7 +234,7 @@ function applyCardEffect(
       if (firstAlive >= 0) {
         const e = ens[firstAlive];
         const existing = e.statusEffects.find((ef) => ef.kind === 'weaken') as { kind: 'weaken'; amount: number } | undefined;
-        const newEffects = e.statusEffects.filter((ef) => ef.kind !== 'weaken');
+        const newEffects: StatusEffect[] = e.statusEffects.filter((ef) => ef.kind !== 'weaken');
         newEffects.push({ kind: 'weaken', amount: (existing?.amount ?? 0) + effect.amount });
         ens[firstAlive] = { ...e, statusEffects: newEffects };
         logs.push(`${e.name} weakened: -${effect.amount} damage.`);

@@ -19,6 +19,14 @@ import { combatReducer, buildInitialState } from '@/game/engine';
 import { Card, SynergyType } from '@/game/types';
 import { useMeta } from '@/context/MetaContext';
 import { setRunStats } from '@/game/runStats';
+import {
+  playSound,
+  startMusic,
+  stopMusic,
+  resumeAudio,
+  getCardSound,
+  getHitSound,
+} from '@/game/audio';
 import CardView from '@/components/CardView';
 import EnemyView from '@/components/EnemyView';
 import HealthBar from '@/components/HealthBar';
@@ -161,8 +169,9 @@ function CardSelectOverlay({ cards, wave, onSelect, onSkip }: {
           {cards.map((card) => (
             <CardView
               key={card.id}
-              card={card}
+              card={{ ...card, instanceId: `select-${card.id}` }}
               onPress={() => {
+                playSound('button_primary');
                 Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
                 onSelect(card);
               }}
@@ -392,6 +401,20 @@ export default function RunScreen() {
 
   const [state, dispatch] = useReducer(combatReducer, upgrades, buildInitialState);
 
+  // ── Music system ────────────────────────────────────────────────────────────
+  useEffect(() => {
+    resumeAudio();
+    startMusic('combat');
+    return () => stopMusic(0.8);
+  }, []);
+
+  // Switch to boss music on wave 4
+  useEffect(() => {
+    if (state.wave >= state.maxWaves && state.phase === 'player_turn') {
+      startMusic('boss');
+    }
+  }, [state.wave, state.phase, state.maxWaves]);
+
   // ── Tutorial ────────────────────────────────────────────────────────────────
   const { hasSeenTutorial, isLoaded: tutorialLoaded, markSeen: markTutorialSeen } = useTutorial();
   const [tutorialStep, setTutorialStep] = useState(-1);
@@ -495,6 +518,9 @@ export default function RunScreen() {
       if (anyHit) {
         setEnemyHitCounts([...newCounts]);
 
+        // Audio
+        playSound(getHitSound(maxDmg));
+
         // Particles
         const burstType = lastPlayedTagsRef.current[0] ?? 'damage';
         const burstId = `${Date.now()}-${Math.random()}`;
@@ -549,6 +575,7 @@ export default function RunScreen() {
     if (newlyActive.length > 0) {
       if (synergyPopupTimer.current) clearTimeout(synergyPopupTimer.current);
       setSynergyPopup(newlyActive[0]);
+      playSound('synergy_activate');
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       synergyPopupTimer.current = setTimeout(() => setSynergyPopup(null), 2200);
       // Track synergy history
@@ -564,6 +591,25 @@ export default function RunScreen() {
     };
   }, []);
 
+  // ── Boss phase audio ────────────────────────────────────────────────────────
+  const prevPhaseRef = useRef(state.phase);
+  useEffect(() => {
+    if (state.phase === 'boss_intro' && prevPhaseRef.current !== 'boss_intro') {
+      playSound('boss_intro');
+    }
+    prevPhaseRef.current = state.phase;
+  }, [state.phase]);
+
+  // Boss enrage detection
+  const bossEnragedRef = useRef(false);
+  useEffect(() => {
+    const boss = state.enemies.find((e) => e.isBoss);
+    if (boss && boss.enraged && !bossEnragedRef.current) {
+      bossEnragedRef.current = true;
+      playSound('boss_enrage');
+    }
+  }, [state.enemies]);
+
   // ── Layout ─────────────────────────────────────────────────────────────────
   const topPad = Platform.OS === 'web' ? 67 : insets.top;
   const botPad = Platform.OS === 'web' ? 34 : insets.bottom;
@@ -576,6 +622,8 @@ export default function RunScreen() {
     if (state.player.energy < cost) return;
     // Store tags for particle type
     lastPlayedTagsRef.current = card.tags;
+    // Audio — tag-specific card sound
+    playSound(getCardSound(card.tags));
     // Track stats
     cardsPlayedRef.current++;
     card.tags.forEach((tag) => {
@@ -590,6 +638,7 @@ export default function RunScreen() {
 
   const handleEndTurn = useCallback(() => {
     if (state.phase !== 'player_turn') return;
+    playSound('end_turn');
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     dispatch({ type: 'END_TURN' });
   }, [state.phase]);
@@ -603,6 +652,8 @@ export default function RunScreen() {
   }, []);
 
   const handleVictory = useCallback(async () => {
+    stopMusic(1.2);
+    playSound('victory');
     await addGold(state.goldEarned);
     await recordRun(true, state.goldEarned * 10);
     setRunStats({
@@ -623,6 +674,8 @@ export default function RunScreen() {
   }, [state.goldEarned, state.wave, state.turn, state.activeSynergies, addGold, recordRun, router]);
 
   const handleGameOver = useCallback(async () => {
+    stopMusic(0.6);
+    playSound('defeat');
     await recordRun(false, state.goldEarned * 10);
     setRunStats({
       won: false,

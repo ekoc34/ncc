@@ -6,6 +6,7 @@ import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
 import { useMeta } from '@/context/MetaContext';
+import { playSound, resumeAudio } from '@/game/audio';
 
 export default function MainMenu() {
   const router = useRouter();
@@ -16,6 +17,8 @@ export default function MainMenu() {
   const botPad = Platform.OS === 'web' ? 34 : insets.bottom;
 
   const startRun = () => {
+    resumeAudio();
+    playSound('button_primary');
     router.push({
       pathname: '/run',
       params: { upgrades: JSON.stringify(meta.upgrades) },
@@ -64,7 +67,10 @@ export default function MainMenu() {
           <View style={styles.startBtnGlow} />
         </TouchableOpacity>
 
-        <TouchableOpacity style={styles.secondaryBtn} onPress={() => router.push('/upgrade')}>
+        <TouchableOpacity
+          style={styles.secondaryBtn}
+          onPress={() => { playSound('button_click'); router.push('/upgrade'); }}
+        >
           <Feather name="trending-up" size={18} color="#7b2fff" />
           <Text style={styles.secondaryBtnText}>UPGRADES</Text>
           {isLoaded && meta.totalGold > 0 && (
@@ -74,7 +80,10 @@ export default function MainMenu() {
           )}
         </TouchableOpacity>
 
-        <TouchableOpacity style={styles.secondaryBtn} onPress={() => router.push('/settings')}>
+        <TouchableOpacity
+          style={styles.secondaryBtn}
+          onPress={() => { playSound('button_click'); router.push('/settings'); }}
+        >
           <Feather name="settings" size={18} color="#7b2fff" />
           <Text style={styles.secondaryBtnText}>SETTINGS</Text>
         </TouchableOpacity>
