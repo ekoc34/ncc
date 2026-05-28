@@ -25,6 +25,9 @@ import HealthBar from '@/components/HealthBar';
 import SynergyBadge from '@/components/SynergyBadge';
 import ParticleBurst from '@/components/ParticleBurst';
 import SynergyPopup from '@/components/SynergyPopup';
+import TutorialOverlay from '@/components/TutorialOverlay';
+import { useTutorial } from '@/hooks/useTutorial';
+import { trackEvent } from '@/game/analytics';
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -388,6 +391,45 @@ export default function RunScreen() {
   }, []);
 
   const [state, dispatch] = useReducer(combatReducer, upgrades, buildInitialState);
+
+  // ── Tutorial ────────────────────────────────────────────────────────────────
+  const { hasSeenTutorial, isLoaded: tutorialLoaded, markSeen: markTutorialSeen } = useTutorial();
+  const [tutorialStep, setTutorialStep] = useState(-1);
+  const tutorialStartedRef = useRef(false);
+
+  useEffect(() => {
+    if (
+      tutorialLoaded &&
+      !hasSeenTutorial &&
+      !tutorialStartedRef.current &&
+      state.phase === 'player_turn' &&
+      state.turn === 1 &&
+      state.wave === 1
+    ) {
+      tutorialStartedRef.current = true;
+      setTutorialStep(0);
+      trackEvent('tutorial_started');
+    }
+  }, [tutorialLoaded, hasSeenTutorial, state.phase, state.turn, state.wave]);
+
+  const handleTutorialNext = useCallback(() => {
+    setTutorialStep((prev) => {
+      const next = prev + 1;
+      if (next >= 5) {
+        markTutorialSeen();
+        trackEvent('tutorial_completed', { steps_completed: 5 });
+        return -1;
+      }
+      trackEvent('tutorial_step_completed', { step: next });
+      return next;
+    });
+  }, [markTutorialSeen]);
+
+  const handleTutorialSkip = useCallback(() => {
+    markTutorialSeen();
+    trackEvent('tutorial_skipped', { step_at_skip: tutorialStep });
+    setTutorialStep(-1);
+  }, [markTutorialSeen, tutorialStep]);
 
   // ── Animation state ────────────────────────────────────────────────────────
   const [enemyHitCounts, setEnemyHitCounts] = useState<number[]>([]);
@@ -798,6 +840,16 @@ export default function RunScreen() {
           <GameOverOverlay goldEarned={state.goldEarned} wave={state.wave} onRetry={handleGameOver} />
         )}
       </Animated.View>
+
+      {/* Tutorial overlay — rendered above shake layer, only during player_turn */}
+      {tutorialStep >= 0 && state.phase === 'player_turn' && (
+        <TutorialOverlay
+          step={tutorialStep}
+          totalSteps={5}
+          onNext={handleTutorialNext}
+          onSkip={handleTutorialSkip}
+        />
+      )}
     </View>
   );
 }
